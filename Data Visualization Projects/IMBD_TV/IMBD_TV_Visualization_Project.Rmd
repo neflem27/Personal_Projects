@@ -1,0 +1,322 @@
+---
+title: "IMBD TV Visualization & Sentiment Analysis"
+author: "Neftali Lemus"
+date: '2023-01-15'
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+  pdf_document:
+    latex: xelatex
+    number_section: T
+header-includes: \usepackage{float}
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Description**: The following visualization project involves the **50,000 IMDB TV and Web Series** Kaggle data set that can be freely downloaded through the link below. This project looks to visualize and understand the distribution trends among IMDB TV's top shows. One of the most popular uses for data of this type are recommendation systems which involve meaningful item or product recommendations to a collection of users.
+
+https://www.kaggle.com/datasets/muralidharbhusal/50000-imdb-tv-and-web-series 
+
+# About the Dataset
+
+## Context
+
+Scrapped from IMDb, the dataset is a collection of top 50,000 TV shows worldwide based on their popularity.
+
+## Content
+
+The data contains 7 columns and 50,000 rows.
+
+1. Series Title : The name of the TV show.
+2. Release Year : The Year the show was released in.
+3. Runtime : The runtime of single episode of the Show.
+4. Genre : The genre of the show.
+5. Rating : The rating the specific show has received from users in IMDB.
+6. Cast : The leading stars of the show.
+7. Synopsis : Background and summary of the story of the show.
+
+## Acknowledgement
+
+The dataset is prepared by scraping the IMDb's website but is not endorsed by IMDb.
+
+# Raw Dataset
+
+```{r message=FALSE, warning=FALSE}
+setwd("C:/Users/domin/OneDrive/Escritorio/Github Files")
+tvseries <- read.csv("TV Series.csv")
+library(tidyverse)
+library(ggplot2)
+dim(tvseries)
+str(tvseries)
+sum(is.na(tvseries))
+```
+**First Impressions:**
+
+- There are no initial NA values. 
+
+- There are only character variables.
+
+- Release.year's format is messy.
+
+- Multiple genre's combined as single character strings.
+
+- A proper data transformation is necessary to understand its distributions.
+
+# Data Cleaning
+
+## Duplicates Check 
+
+```{r}
+# Series.Title Frequencies
+length(which(table(tvseries$Series.Title) > 1))
+```
+
+The output shows that 362 title entries have a frequency greater than one. We can adress this issue by using the duplicate() function to identify and remove repeated elements in order to avoid inaccurate results. An example of this follows:
+
+```{r}
+repeated_instances <- which(tvseries$Series.Title == "Breaking Bad")
+breaking_bad_instances <- tvseries[repeated_instances,]
+dim(breaking_bad_instances)
+```
+
+**Question**: Are these 801 instances equal?
+
+```{r}
+head(breaking_bad_instances,3)
+```
+Yes, all Breaking Bad entries contain the same information across all column variables.
+
+## Removal of Duplicates
+
+Since duplicates were found in the data, we can proceed with the *duplicate* function which returns a logical vector where TRUE elements correspond to duplicate series titles.
+
+```{r}
+# Number of duplicates
+sum(duplicated(tvseries$Series.Title)) 
+# Extracting non duplicates 
+tvseries2 <- tvseries[!duplicated(tvseries$Series.Title), ]
+dim(tvseries2) 
+sum(which(table(tvseries2$Series.Title) > 1))
+```
+The new IMDB TV data set has shrunk to 9,644 unique observations.
+
+**Note**: The duplicate() function keeps the first instance of a record and removed the rest, which is why *His Dark Materials* rating of 9.7 was dropped. The first instance for this show had a rating of 7.8
+
+
+## String Extraction and Data Type Transformations of 'Release.Year', 'Runtime' and 'Rating'
+
+As seen in the beginning, Release.Year has a messy character format that is hard to visualize as some of the shows lack and end date. Many are still in production which is why extracting the release year only is the best way to understand its distribution.
+
+```{r}
+head(tvseries2$Release.Year) # Note: Incomplete observations
+# Extracting release year only
+tvseries2$Release.Year <- substr(tvseries2$Release.Year, start = 2, stop = 5)
+# Coercing character to numeric
+tvseries2$Release.Year <- as.numeric(tvseries2$Release.Year)
+```
+Runtime and Rating are also character strings that can be more useful as a numeric variables.
+
+```{r message=FALSE, warning=TRUE}
+#Extracting "Runtime" minutes and coercing them to numeric
+tvseries2$Runtime <- as.numeric(substr(tvseries2$Runtime, start = 1 , stop = 3 ))
+# Converting Rating to numeric
+tvseries2$Rating <- as.numeric(tvseries2$Rating)
+```
+
+## Transformed Dataset
+
+```{r warning=FALSE}
+str(tvseries2)
+dim(tvseries2)
+sum(is.na(tvseries2))
+```
+
+**Notes:** 
+
+* NA's introduced by coercion, there is no need for imputation/deletion as ggplot and base R have ways to deal with missing values while plotting. We can update missing entries but for the sake of simplicity I will opt to use complete observations only.
+
+* Release.Year, Runtime, and Rating are now numeric.
+
+* The data set has significantly reduced dimensions.
+
+* Since Genre and Synopsis are single character strings with multiple elements, its best to break them down individually and store them in an object for analysis.
+
+## Subset of Analysis: Top 100 Rated Shows
+
+Due to the large amount of titles I have opted to focus on the top 100 shows based on ratings, "top100" will be our last subset fore analysis from here on.
+
+```{r}
+# Lets rank the top 100 by rating
+tvseries2r <- tvseries2[order(tvseries2$Rating, decreasing = T),]
+top100 <- head(tvseries2r, 100)
+```
+
+# Explanatory Data Analysis
+
+## Ordered Ratings Bar Plot
+
+```{r warning=FALSE}
+library(forcats)
+df_means = top100 %>%
+  group_by(Series.Title) %>%
+  summarize(Rating = mean(Rating))
+df_means %>%
+  ggplot(aes(x = fct_reorder(Series.Title, Rating), y = Rating)) +
+  geom_col( fill = heat.colors(100, alpha = .6), width = 1) +
+  coord_flip(ylim = c(9,10), ) +
+  scale_y_continuous(breaks=seq(9,10,0.2)) +
+  xlab("Series Title") +
+  theme(axis.text = element_text(size = 3))
+```
+
+* As we can see by the previous bar graph, IMDB's top 100 series have a rating of 9 or higher.
+
+## Release Year Density Line
+
+```{r warning=FALSE}
+# Density Line (Release.Year) #Note: NA's removed by default
+ggplot(top100, aes(x = Release.Year)) +
+  geom_density(color="darkblue", fill="lightblue", na.rm = T) +
+  xlab("Release Year")
+# Summary of "Release.Year"
+summary(top100$Release.Year)
+```
+
+* The density plot shows the distribution of the release year of the top 100 shows. The data is left skewed, meaning that most of the show's release dates concentrate on the far right side of the graph. We can see a sharp increase in shows starting in the 2000's and a slight drop between 2019-2020 which was due to the impact that Covid-19 lock down had in the TV industry.
+
+## Genre Frequency Table
+
+Furthermore, we can also visualize the different genres in 'top100'. The frequency charts were made using the "epiDisplay" package.There are multiple genres listed per 'Series.Title' and its best to string split them in order to have them grouped accordingly.
+
+```{r}
+library(epiDisplay)
+# string splitting and coercing the top100 genres into a factor 
+genres <- factor(unlist(strsplit(top100$Genre[1:100],split = c(", "))),
+                 exclude = c("****")) #Note: "****" missing entries removed
+tab1(genres, sort.group = "decreasing", cex = 0.7, main = "Genre Frequency in Top 100")
+tab1(genres, sort.group = "decreasing", cex = 0.7, bar.values = "percent", main = "Genre Percentage in Top 100", xlab = "Percentage")
+
+```
+
+
+
+* Drama, Comedy and Adventure are the top three genres mentioned in the 'Genre' variable. 
+
+* Out of a total of 198 entries, Drama and Comedy are mentioned 37 times each, accounting for an estimate of 18.5% of the total data respectively while Adventure accounts for 10.5% of the data with 21 mentions.
+
+## Runtimes Barchart
+
+```{r message=FALSE, warning=FALSE}
+#Removing NA Running Times 
+top100_modified <-top100[-which(is.na(top100$Runtime)),]
+#Ordering Runtimes plot by lenght
+library(forcats)
+df_means2 = top100_modified %>%
+  group_by(Series.Title) %>%
+  summarize(Runtime = mean(Runtime))
+df_means2 %>%
+  ggplot( aes(y = Runtime, x = fct_reorder(Series.Title, Runtime))) +
+  geom_col(na.rm = T) +
+  coord_flip() +
+  theme(axis.text = element_text(size = 5)) +
+  xlab("Series Title")
+```
+
+**Note** : Only complete 'Runtime' observations were used for this plot. 
+
+# Sentiment Analysis
+
+For the next part of my IMDB TV I will conduct a quick sentiment analysis in order to understand the structure of synopsis. 
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(textdata)
+library(tidytext)
+library(dplyr)
+library(stringr)
+library(tibble)
+library(ggplot2)
+```
+
+## Frequency of Most Popular Words in Sypnosis  
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Separate descriptions into words & mutate "word"
+data_by_word <- tvseries2r %>% 
+  mutate(linenumber = row_number()) %>% 
+  unnest_tokens(word, "Synopsis")
+
+#Stop Words: This removes meaningless words 
+#EX.(I, a, me, you, about, to, etc.)
+data("stop_words")
+
+#Remove stop words
+clean_data <- data_by_word %>%
+  anti_join(stop_words)
+
+#Count Most Common Words
+a <- clean_data %>% 
+  count(word,sort = TRUE)
+head(a)
+#Graph the top 30 words
+p <- clean_data %>% 
+  count(word, sort = TRUE) %>% 
+  filter(n>200, word != "â") %>%
+  mutate(word = reorder(word,n)) %>% 
+  ggplot(aes(word,n)) +
+  geom_col(colour = "black") +  
+  xlab("Words") + 
+  ylab("Count") +
+  ggtitle("Most Popular Descriptive Words in Synopsis") +
+  coord_flip() + 
+  geom_bar(stat="identity")
+  
+p
+```
+
+* Life, summary, series, family, world and lives are the top words used in 'Synopsis' with over 600 occurrences each.
+
+## Sypnosis Word Cloud
+
+```{r message=FALSE, warning=FALSE}
+library(wordcloud)
+# Word Cloud
+library(wordcloud)
+clean_data %>% 
+  filter(word != "â",) %>% 
+  anti_join(stop_words) %>% 
+  count(word) %>% 
+  with(wordcloud(word,n, max.words = 100, scale = c(3.5,0.5), colors = rainbow(50)))
+
+```
+
+* The word cloud shows with greater detail the most popular words employed in 'Sypnosis' where life, family, series and summary are frequently used to describe IMDB TV's highest rated shows.
+
+# Ideas for Further Analysis
+
+* Merging public reviews with our data set would help understand why these shows are popular.
+
+* Analyse ratings between genres.
+
+* Break down cast and look into the most active actors among the top shows.
+
+* Is there a relationship between a show's cast and its rating?
+
+* Since most of the top shows are recent,do they owe their popularity to the mass media exposure or has the quality of TV shows increased with time? 
+
+* What are some of the most important factors that contribute to a show's rating?
+
+* How can a genre recommendation system be built upon the remaining variables?
+
+
+
+
+
+
+
+
+
+
+
