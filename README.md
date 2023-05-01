@@ -2,4 +2,4 @@
 
 This is a collection of my work.
 
-Used softwares: R Studio, Tableau, and Excel.
+Used software: R Studio and SQL.
